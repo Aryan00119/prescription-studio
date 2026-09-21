@@ -21,4 +21,4 @@ This project is configured to run for free on **GitHub Pages**.
    - Select Branch: **`main`** / Folder: **`/ (root)`**.
    - Click **Save**.
 4. Your website will be live at:
-   `https://Aryan00119.github.io/medical-prescription-studio/`
+   `https://Aryan00119.github.io/prescription-studio/`
