@@ -7,7 +7,7 @@ A professional, high-precision web-based Medical Prescription & Receipt Studio m
 - **Multi-Page Pagination**: Automatically breaks large prescriptions (11+ medications) across multiple A4 pages without overlapping text.
 - **1-Click PDF Export**: High-resolution, vector-crisp PDF download with zero extra blank pages.
 - **Instant Google Sheet Auto-Save**: Seamlessly saves prescription records to your connected Google Sheet when you download the PDF or click Sync.
-- **Mobile Responsive**: Fully responsive UI with 4 instant-access action buttons (Sample, Clear, Print, Download PDF) and a single-thumb floating bottom toolbar.
+- **Mobile Responsive**: Fully responsive UI with instant-access action buttons (Clear, Print, Download PDF) and a single-thumb floating bottom toolbar.
 - **10-Digit Mobile Restriction**: Real-time validation preventing invalid patient/doctor phone numbers.
 
 ## Live Deployment (GitHub Pages) 🚀

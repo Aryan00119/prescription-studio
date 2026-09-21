@@ -707,8 +707,8 @@ html, body {
 .rx-doc-info {
   display: flex;
   align-items: flex-start;
-  gap: 14px;
-  max-width: 65%;
+  gap: 24px;
+  max-width: 68%;
 }
 
 .rx-logo-container {
@@ -1549,12 +1549,12 @@ html, body {
     font-size: 0.7rem;
   }
 
-  /* All 4 buttons 100% visible simultaneously - ZERO horizontal scroll */
+  /* All buttons 100% visible simultaneously - ZERO horizontal scroll */
   .header-actions {
     display: grid !important;
-    grid-template-columns: 1.05fr 0.8fr 0.85fr 1.35fr !important;
+    grid-template-columns: 0.85fr 0.9fr 1.35fr !important;
     width: 100% !important;
-    gap: 5px !important;
+    gap: 6px !important;
     overflow-x: visible !important;
     padding: 0 !important;
     flex-wrap: nowrap !important;

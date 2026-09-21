@@ -779,14 +779,17 @@ function setupEventListeners() {
   document.getElementById("btnAddMed").addEventListener("click", addSingleMed);
   document.getElementById("btnAddMedBottom").addEventListener("click", addSingleMed);
 
-  // Load Sample Data
-  document.getElementById("btnLoadSample").addEventListener("click", () => {
-    if (confirm("Load sample prescription data (Dr. Aparna T & Salil Garg)?")) {
-      appState = JSON.parse(JSON.stringify(SAMPLE_DATA));
-      loadStateIntoForm();
-      renderAllPages();
-    }
-  });
+  // Load Sample Data (if button present)
+  const btnLoadSample = document.getElementById("btnLoadSample");
+  if (btnLoadSample) {
+    btnLoadSample.addEventListener("click", () => {
+      if (confirm("Load sample prescription data (Dr. Aparna T & Salil Garg)?")) {
+        appState = JSON.parse(JSON.stringify(SAMPLE_DATA));
+        loadStateIntoForm();
+        renderAllPages();
+      }
+    });
+  }
 
   // Clear Form
   document.getElementById("btnClearForm").addEventListener("click", () => {
