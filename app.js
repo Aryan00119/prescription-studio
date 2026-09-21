@@ -1353,46 +1353,27 @@ function downloadPDF() {
     floatBtn.disabled = true;
   }
 
-  // 2. Clone pages into an isolated off-screen desktop container
-  // This completely eliminates mobile viewport squishing, hidden display:none tab issues, and text overlap!
-  const offscreenContainer = document.createElement("div");
-  offscreenContainer.id = "pdfOffscreenContainer";
-  offscreenContainer.style.position = "fixed";
-  offscreenContainer.style.left = "-9999px";
-  offscreenContainer.style.top = "0";
-  offscreenContainer.style.width = "210mm";
-  offscreenContainer.style.margin = "0";
-  offscreenContainer.style.padding = "0";
-  offscreenContainer.style.background = "#ffffff";
-  offscreenContainer.style.zIndex = "-999999";
-  offscreenContainer.style.display = "block";
-  offscreenContainer.style.visibility = "visible";
+  // Ensure preview pane is visible during capture even if user was on mobile editor tab
+  const previewPane = document.querySelector(".preview-pane");
+  const originalPreviewDisplay = previewPane ? previewPane.style.display : "";
+  if (previewPane && window.getComputedStyle(previewPane).display === "none") {
+    previewPane.style.display = "flex";
+  }
 
-  const clone = wrapper.cloneNode(true);
-  clone.style.transform = "none";
-  clone.style.gap = "0px";
-  clone.style.margin = "0px";
-  clone.style.padding = "0px";
-  clone.style.display = "block";
+  const originalTransform = wrapper.style.transform;
+  const originalGap = wrapper.style.gap;
 
-  const clonePages = clone.querySelectorAll(".prescription-page");
-  clonePages.forEach((p) => {
+  wrapper.style.transform = "none";
+  wrapper.style.gap = "0px";
+
+  const pages = wrapper.querySelectorAll(".prescription-page");
+  pages.forEach(p => {
     p.style.boxShadow = "none";
-    p.style.width = "210mm";
-    p.style.minWidth = "210mm";
-    p.style.maxWidth = "210mm";
     p.style.height = "296.5mm";
     p.style.minHeight = "296.5mm";
     p.style.maxHeight = "296.5mm";
     p.style.margin = "0px";
-    p.style.boxSizing = "border-box";
-    p.style.overflow = "hidden";
-    p.style.background = "#ffffff";
-    p.style.position = "relative";
   });
-
-  offscreenContainer.appendChild(clone);
-  document.body.appendChild(offscreenContainer);
 
   const patientName = (appState.patient.name || "Patient").replace(/[^a-zA-Z0-9_-]/g, "_");
   const dateStr = (appState.patient.date || "Prescription").replace(/[\/\\:]/g, "-");
@@ -1409,8 +1390,6 @@ function downloadPDF() {
     html2canvas: {
       scale: 2,
       useCORS: true,
-      letterRendering: true,
-      windowWidth: 1200, // Forces desktop layout calculation inside html2canvas
       scrollY: 0,
       scrollX: 0
     },
@@ -1421,9 +1400,9 @@ function downloadPDF() {
     }
   };
 
-  function cleanup() {
-    if (offscreenContainer.parentNode) {
-      offscreenContainer.parentNode.removeChild(offscreenContainer);
+  function restoreStyles() {
+    if (previewPane) {
+      previewPane.style.display = originalPreviewDisplay;
     }
     if (btn) {
       btn.innerHTML = originalText;
@@ -1432,20 +1411,37 @@ function downloadPDF() {
     if (floatBtn) {
       floatBtn.disabled = false;
     }
+    wrapper.style.transform = originalTransform;
+    wrapper.style.gap = originalGap;
+    pages.forEach(p => {
+      p.style.boxShadow = "";
+      p.style.height = "";
+      p.style.minHeight = "";
+      p.style.maxHeight = "";
+      p.style.margin = "";
+    });
   }
 
-  html2pdf()
-    .set(opt)
-    .from(offscreenContainer)
-    .save()
-    .then(() => {
-      cleanup();
-    })
-    .catch(err => {
-      console.error("PDF generation error:", err);
-      cleanup();
-      window.print();
-    });
+  const generate = () => {
+    html2pdf()
+      .set(opt)
+      .from(wrapper)
+      .save()
+      .then(() => {
+        restoreStyles();
+      })
+      .catch(err => {
+        console.error("PDF generation error:", err);
+        restoreStyles();
+        window.print();
+      });
+  };
+
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(generate).catch(generate);
+  } else {
+    setTimeout(generate, 100);
+  }
 }
 
 function setDeepValue(obj, path, value) {
