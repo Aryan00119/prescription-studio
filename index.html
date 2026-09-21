@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Medical Prescription & Receipt Studio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- html2pdf.js for multi-page PDF generation -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <link rel="stylesheet" href="style.css?v=4.5" />
+</head>
+<body class="bright-theme">
+  <div class="app-layout">
+    
+    <!-- Top Bar Navigation (Clean, Compact, Responsive) -->
+    <header class="app-header">
+      <div class="header-main-row">
+        <div class="header-brand">
+          <div class="brand-badge">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+              <line x1="12" y1="18" x2="12" y2="12"></line>
+              <line x1="9" y1="15" x2="15" y2="15"></line>
+            </svg>
+          </div>
+          <div>
+            <h1>Rx Prescription Studio</h1>
+            <p class="subtitle" id="pageCountSummary">A4 Multi-Page Medical Generator</p>
+          </div>
+        </div>
+
+        <button id="btnSaveGoogleSheet" class="sheet-connected-pill" title="Master Receipt Sheet Connected &amp; Auto-Save Active">
+          <span class="sheet-pulse-dot"></span>
+          <span class="sheet-pill-label">Sheet Connected</span>
+        </button>
+      </div>
+
+      <!-- Action Buttons (All 4 100% visible on Mobile without scroll) -->
+      <div class="header-actions">
+        <button id="btnLoadSample" class="btn btn-secondary" title="Load sample prescription data">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path>
+            <path d="M21 3v5h-5"></path>
+            <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path>
+            <path d="M8 16H3v5"></path>
+          </svg>
+          <span>Load Sample</span>
+        </button>
+        <button id="btnClearForm" class="btn btn-ghost" title="Clear for new patient">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+          </svg>
+          <span>Clear</span>
+        </button>
+        <button id="btnPrint" class="btn btn-primary" title="Print prescription (Ctrl+P)">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <polyline points="6 9 6 2 18 2 18 9"></polyline>
+            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+            <rect x="6" y="14" width="12" height="8"></rect>
+          </svg>
+          <span>Print</span>
+        </button>
+        <button id="btnDownloadPdf" class="btn btn-accent" title="Download PDF document (Auto-saves to Google Sheet)">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          <span>Download PDF</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Top Mobile Switcher Tabs -->
+    <div class="mobile-tabs-bar">
+      <button id="tabBtnEditor" class="tab-btn active" data-tab="editor">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+        </svg>
+        <span>1. Form Editor</span>
+      </button>
+      <button id="tabBtnPreview" class="tab-btn" data-tab="preview">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+          <circle cx="12" cy="12" r="3"></circle>
+        </svg>
+        <span id="tabPreviewLabel">2. View Receipt (1 Page)</span>
+      </button>
+    </div>
+
+    <!-- Main Workspace -->
+    <main class="main-content show-editor" id="mainContentArea">
+      
+      <!-- Editor Panel (Left) -->
+      <aside class="editor-pane" id="editorPane">
+        <div class="editor-scroll">
+          
+          <!-- Section 1: Doctor & Clinic Details -->
+          <div class="form-card open" id="sec-doctor">
+            <div class="form-card-header">
+              <div class="card-title">
+                <span class="step-num">1</span>
+                <div>
+                  <h3>Doctor &amp; Clinic Information</h3>
+                  <p>Credentials, license, contact &amp; branding</p>
+                </div>
+              </div>
+              <button type="button" class="collapse-toggle" aria-label="Toggle Section">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              </button>
+            </div>
+            <div class="form-card-body">
+              <div class="input-grid-2">
+                <div class="input-group">
+                  <label for="inputDocName">Doctor Name</label>
+                  <input type="text" id="inputDocName" placeholder="e.g. Dr. Aparna T" />
+                </div>
+                <div class="input-group">
+                  <label for="inputDocDegrees">Qualifications / Degrees</label>
+                  <input type="text" id="inputDocDegrees" placeholder="e.g. MD, DNB Dermatology, MRCPUK (SCE)" />
+                </div>
+              </div>
+
+              <div class="input-group">
+                <label for="inputDocSpecialty">Specialties (divided by | )</label>
+                <input type="text" id="inputDocSpecialty" placeholder="e.g. Dermatology | Dermatosurgery | Aesthetics" />
+              </div>
+
+              <div class="input-group">
+                <label for="inputDocExp">Experience / Affiliations (one per line)</label>
+                <textarea id="inputDocExp" rows="3" placeholder="Ex-Senior Resident – PGIMER, Chandigarh..."></textarea>
+              </div>
+
+              <div class="input-grid-2">
+                <div class="input-group">
+                  <label for="inputRegNo">Registration / PMC No.</label>
+                  <input type="text" id="inputRegNo" placeholder="e.g. PMC Reg. No. 65062" />
+                </div>
+                <div class="input-group">
+                  <label for="inputPhone">Phone Number</label>
+                  <input type="tel" id="inputPhone" maxlength="10" pattern="[0-9]{10}" inputmode="numeric" placeholder="e.g. 9757387425" />
+                </div>
+              </div>
+
+              <div class="input-grid-2">
+                <div class="input-group">
+                  <label for="inputEmail">Email Address</label>
+                  <input type="email" id="inputEmail" placeholder="e.g. taparna97@gmail.com" />
+                </div>
+                <div class="input-group">
+                  <label for="inputLocation">City / Clinic Address</label>
+                  <input type="text" id="inputLocation" placeholder="e.g. Chandigarh" />
+                </div>
+              </div>
+
+              <div class="logo-customizer">
+                <label>Doctor / Clinic Logo</label>
+                <div class="logo-options">
+                  <label class="radio-pill">
+                    <input type="radio" name="logoType" value="silhouette" checked />
+                    <span>Silhouette</span>
+                  </label>
+                  <label class="radio-pill">
+                    <input type="radio" name="logoType" value="caduceus" />
+                    <span>Caduceus</span>
+                  </label>
+                  <label class="radio-pill">
+                    <input type="radio" name="logoType" value="custom" />
+                    <span>Custom Upload</span>
+                  </label>
+                </div>
+                <div id="customLogoUploadWrapper" class="custom-upload-wrapper hidden">
+                  <input type="file" id="customLogoInput" accept="image/*" />
+                  <span class="file-hint">Upload PNG/JPG logo</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section 2: Patient Details -->
+          <div class="form-card open" id="sec-patient">
+            <div class="form-card-header">
+              <div class="card-title">
+                <span class="step-num">2</span>
+                <div>
+                  <h3>Patient Details</h3>
+                  <p>Name, date, age, sex, address &amp; allergies</p>
+                </div>
+              </div>
+              <button type="button" class="collapse-toggle" aria-label="Toggle Section">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              </button>
+            </div>
+            <div class="form-card-body">
+              <div class="input-grid-2">
+                <div class="input-group">
+                  <label for="inputPatientName">Patient Name</label>
+                  <input type="text" id="inputPatientName" placeholder="Enter patient name" />
+                </div>
+                <div class="input-group">
+                  <label for="inputDate">Prescription Date</label>
+                  <input type="text" id="inputDate" placeholder="DD/MM/YYYY" />
+                </div>
+              </div>
+
+              <div class="input-grid-2">
+                <div class="input-group">
+                  <label for="inputAgeSex">Age / Sex</label>
+                  <input type="text" id="inputAgeSex" placeholder="e.g. 30 / M" />
+                </div>
+                <div class="input-group">
+                  <label for="inputPatientAddress">Address (City)</label>
+                  <input type="text" id="inputPatientAddress" placeholder="e.g. Chandigarh" />
+                </div>
+              </div>
+
+              <div class="input-grid-2">
+                <div class="input-group">
+                  <label for="inputPatientPhone">Patient Phone No.</label>
+                  <input type="tel" id="inputPatientPhone" maxlength="10" pattern="[0-9]{10}" inputmode="numeric" placeholder="10-digit mobile number" />
+                </div>
+                <div class="input-group">
+                  <label for="inputDrugAllergies">Drug Allergies</label>
+                  <input type="text" id="inputDrugAllergies" placeholder="None or allergy details" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section 3: Clinical Notes -->
+          <div class="form-card open" id="sec-clinical">
+            <div class="form-card-header">
+              <div class="card-title">
+                <span class="step-num">3</span>
+                <div>
+                  <h3>Complaints &amp; Diagnosis</h3>
+                  <p>Symptoms, presentation &amp; assessment</p>
+                </div>
+              </div>
+              <button type="button" class="collapse-toggle" aria-label="Toggle Section">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              </button>
+            </div>
+            <div class="form-card-body">
+              <div class="input-group">
+                <label for="inputChiefComplaints">Chief Complaints</label>
+                <textarea id="inputChiefComplaints" rows="2" placeholder="Enter chief complaints..."></textarea>
+              </div>
+
+              <div class="input-group">
+                <label for="inputDiagnosis">Diagnosis / Assessment</label>
+                <textarea id="inputDiagnosis" rows="2" placeholder="Enter diagnosis / assessment..."></textarea>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section 4: Rx / Medication Table -->
+          <div class="form-card open" id="sec-medications">
+            <div class="form-card-header">
+              <div class="card-title">
+                <span class="step-num">4</span>
+                <div>
+                  <div class="title-with-badge">
+                    <h3>Prescription (Rx) Medications</h3>
+                    <span id="medCountBadge" class="count-pill">1 item</span>
+                  </div>
+                  <p id="pageSplitNotice">Automatically paginates cleanly across multiple A4 pages</p>
+                </div>
+              </div>
+              <button type="button" class="collapse-toggle" aria-label="Toggle Section">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              </button>
+            </div>
+            <div class="form-card-body">
+              
+              <!-- Clean Medication Entry Header -->
+              <div class="med-actions-bar">
+                <button type="button" id="btnAddMed" class="btn btn-sm btn-primary">
+                  + Add Medicine Row
+                </button>
+              </div>
+
+              <div id="medicationsContainer" class="med-list">
+                <!-- Dynamically injected medicine cards -->
+              </div>
+              
+              <button type="button" id="btnAddMedBottom" class="btn btn-outline full-width">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <line x1="12" y1="5" x2="12" y2="19"></line>
+                  <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+                + Add Another Medicine Row
+              </button>
+            </div>
+          </div>
+
+          <!-- Section 5: Advice & Investigations -->
+          <div class="form-card open" id="sec-advice">
+            <div class="form-card-header">
+              <div class="card-title">
+                <span class="step-num">5</span>
+                <div>
+                  <h3>General Advice &amp; Investigations</h3>
+                  <p>Skin care directions, lab test referrals &amp; follow-up</p>
+                </div>
+              </div>
+              <button type="button" class="collapse-toggle" aria-label="Toggle Section">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              </button>
+            </div>
+            <div class="form-card-body">
+              <div class="input-group">
+                <label for="inputGeneralAdvice">General Advice / Skin Care (one bullet per line)</label>
+                <textarea id="inputGeneralAdvice" rows="4" placeholder="Enter general advice & skin care points (one per line)..."></textarea>
+              </div>
+
+              <div class="input-group">
+                <label for="inputInvestigations">Investigations / Procedures / Referral (one per line)</label>
+                <textarea id="inputInvestigations" rows="3" placeholder="Enter investigations / tests to be done..."></textarea>
+              </div>
+
+              <div class="input-grid-2">
+                <div class="input-group">
+                  <label for="inputFollowUp">Follow-up Timeframe</label>
+                  <input type="text" id="inputFollowUp" placeholder="e.g. After 7 days" />
+                </div>
+              </div>
+
+              <div class="input-group">
+                <label for="inputDisclaimer">Footer Disclaimer</label>
+                <textarea id="inputDisclaimer" rows="2" placeholder="This prescription is based on an online consultation..."></textarea>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </aside>
+
+      <!-- Preview Panel (Right) -->
+      <section class="preview-pane" id="previewPane">
+        
+        <!-- Preview Toolbar -->
+        <div class="preview-toolbar">
+          <div class="preview-zoom-ctrls">
+            <span class="zoom-label">Zoom:</span>
+            <button id="btnZoomOut" class="btn-icon" title="Zoom Out">-</button>
+            <span id="zoomVal" class="zoom-val">80%</span>
+            <button id="btnZoomIn" class="btn-icon" title="Zoom In">+</button>
+            <button id="btnZoomReset" class="btn-sm" title="Fit to width">Fit</button>
+          </div>
+          <div class="preview-status-pill" id="previewPageIndicator">
+            <span class="pulse-dot"></span>
+            <span id="pageIndicatorText">1 Page (A4 Portrait)</span>
+          </div>
+        </div>
+
+        <!-- Stage holding all paginated sheets -->
+        <div class="preview-stage" id="previewStage">
+          <div class="pages-wrapper" id="pagesWrapper">
+            <!-- Dynamically generated .prescription-page elements -->
+          </div>
+        </div>
+
+      </section>
+
+    </main>
+
+    <!-- Floating Mobile Bottom Switcher Bar -->
+    <div class="mobile-floating-bar" id="mobileFloatingBar">
+      <button id="floatSwitchBtn" class="float-btn primary">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+          <circle cx="12" cy="12" r="3"></circle>
+        </svg>
+        <span id="floatSwitchText">View Receipt</span>
+      </button>
+      <button id="floatDownloadBtn" class="float-btn accent">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="7 10 12 15 17 10"></polyline>
+          <line x1="12" y1="15" x2="12" y2="3"></line>
+        </svg>
+        <span>Download PDF</span>
+      </button>
+      <button id="floatPrintBtn" class="float-btn secondary">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+          <polyline points="6 9 6 2 18 2 18 9"></polyline>
+          <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+          <rect x="6" y="14" width="12" height="8"></rect>
+        </svg>
+        <span>Print</span>
+      </button>
+    </div>
+
+  </div>
+
+  <!-- Google Sheet Sync Modal Dialog -->
+  <div id="sheetModal" class="modal-overlay hidden">
+    <div class="modal-box">
+      <div class="modal-header">
+        <div class="modal-header-title">
+          <div class="sheets-badge">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+              <line x1="8" y1="13" x2="16" y2="13"></line>
+              <line x1="8" y1="17" x2="16" y2="17"></line>
+            </svg>
+          </div>
+          <div>
+            <h3>Google Sheet Cloud Sync</h3>
+            <p>Target Sheet: <strong>Master Receipt Sheet</strong></p>
+          </div>
+        </div>
+        <button id="btnCloseSheetModal" class="btn-close">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <div id="modalAlertBanner" class="modal-alert-banner hidden"></div>
+
+        <div class="sheet-link-box">
+          <span>Connected Spreadsheet:</span>
+          <a href="https://docs.google.com/spreadsheets/d/1XA6S97SodEjr9MdOXryYdiMFZ2iYJ9LXp-P5YgojGNY/edit?usp=sharing" target="_blank" rel="noopener noreferrer" class="sheet-url-link">
+            Open Google Sheet &nearr;
+          </a>
+        </div>
+
+        <div class="webhook-section">
+          <label for="inputWebhookUrl">Google Apps Script Web App URL (Pre-configured):</label>
+          <input type="text" id="inputWebhookUrl" value="https://script.google.com/macros/s/AKfycby_Tch89vXLyi_Kfwmsat06Kc_yD1iozsVOfq4ITsw64551OZ0WER6ixEmG6XsDOOjM3Q/exec" autocomplete="off" spellcheck="false" />
+          <div id="webhookFeedback" class="webhook-feedback success">
+            ✓ Web App Connected! Every PDF download automatically saves to your Master Receipt Sheet.
+          </div>
+        </div>
+
+        <div class="setup-steps-guide">
+          <div class="steps-title">
+            <strong>⚡ Quick 3-Step Setup Guide:</strong>
+          </div>
+          <ol class="steps-list">
+            <li>In your Google Sheet, click <strong>Extensions &gt; Apps Script</strong>.</li>
+            <li>Paste the Apps Script code below and click <strong>Save (💾)</strong>.</li>
+            <li>Click <strong>Deploy &gt; New deployment &gt; Select type: Web app</strong>. Set <strong>Who has access: Anyone</strong> (⚠️ Important: must be "Anyone"), click <strong>Deploy</strong>, and copy the Web App URL into the box above!</li>
+          </ol>
+        </div>
+
+        <div class="script-setup-box">
+          <div class="script-header">
+            <span>Google Apps Script Code (Copy &amp; Paste in Extensions &gt; Apps Script):</span>
+            <button type="button" id="btnCopyScript" class="btn-sm btn-secondary">Copy Script</button>
+          </div>
+          <pre id="appsScriptCode" class="code-box"><code>function doGet(e) {
+  if (e && e.parameter && (e.parameter.patientName || e.parameter.date)) {
+    return doPost(e);
+  }
+  return ContentService.createTextOutput("Prescription Studio Webhook is Active and Ready!").setMimeType(ContentService.MimeType.TEXT);
+}
+
+function doPost(e) {
+  try {
+    var ss;
+    try {
+      ss = SpreadsheetApp.getActiveSpreadsheet();
+    } catch(err) {}
+    if (!ss) {
+      ss = SpreadsheetApp.openById("1XA6S97SodEjr9MdOXryYdiMFZ2iYJ9LXp-P5YgojGNY");
+    }
+    var sheet = ss.getSheets()[0];
+    
+    var data = {};
+    if (e && e.postData && e.postData.contents) {
+      try {
+        data = JSON.parse(e.postData.contents);
+      } catch(err) {
+        data = e.parameter || {};
+      }
+    } else if (e && e.parameter) {
+      data = e.parameter;
+    }
+
+    if (sheet.getLastRow() === 0) {
+      sheet.appendRow(["Timestamp", "Prescription Date", "Patient Name", "Age/Sex", "Phone", "Address/City", "Drug Allergies", "Chief Complaints", "Diagnosis", "Medications Summary", "General Advice", "Investigations", "Follow-up", "Doctor Name"]);
+    }
+    sheet.appendRow([
+      new Date(),
+      data.date || "",
+      data.patientName || "",
+      data.ageSex || "",
+      data.phone || "",
+      data.address || "",
+      data.drugAllergies || "None",
+      data.chiefComplaints || "",
+      data.diagnosis || "",
+      data.medicationsSummary || "",
+      data.advice || "",
+      data.investigations || "",
+      data.followUp || "",
+      data.doctorName || ""
+    ]);
+    return ContentService.createTextOutput(JSON.stringify({status: "success"})).setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({status: "error", message: err.toString()})).setMimeType(ContentService.MimeType.JSON);
+  }
+}</code></pre>
+        </div>
+
+        <div class="modal-actions-row">
+          <button type="button" id="btnSyncNow" class="btn btn-sheets">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+            <span>Sync Record Now</span>
+          </button>
+          <button type="button" id="btnCopyRowForSheet" class="btn btn-outline" style="border-color:#10b981;color:#047857;background:#ecfdf5;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+            <span>Copy Row (Ctrl+V for Sheet)</span>
+          </button>
+          <button type="button" id="btnDownloadCsv" class="btn btn-secondary">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            <span>Download CSV</span>
+          </button>
+        </div>
+
+        <div id="syncStatusMsg" class="sync-status hidden"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js?v=6.0"></script>
+</body>
+</html>
