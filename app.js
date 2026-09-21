@@ -85,8 +85,481 @@ const GOOGLE_SHEET_URL = "https://docs.google.com/spreadsheets/d/1XA6S97SodEjr9M
 // Application State (Clean by default)
 let appState = JSON.parse(JSON.stringify(CLEAN_DEFAULT_DATA));
 let customLogoDataUrl = null;
-let currentZoom = 0.8;
 let currentTab = "editor";
+
+// ==========================================================================
+// Master Sheet Database & Patient Auto-Fetch System
+// ==========================================================================
+let cachedPatients = [];
+let isFetchingSheetDb = false;
+
+function getMasterSheetId() {
+  const url = GOOGLE_SHEET_URL;
+  const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  return match ? match[1] : "1XA6S97SodEjr9MdOXryYdiMFZ2iYJ9LXp-P5YgojGNY";
+}
+
+/**
+ * Robust RFC 4180 CSV Parser
+ */
+function parseCSV(text) {
+  const rows = [];
+  let currentRow = [];
+  let currentVal = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    const next = text[i + 1];
+
+    if (inQuotes) {
+      if (c === '"') {
+        if (next === '"') {
+          currentVal += '"';
+          i++; // skip escaped quote
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        currentVal += c;
+      }
+    } else {
+      if (c === '"') {
+        inQuotes = true;
+      } else if (c === ',') {
+        currentRow.push(currentVal.trim());
+        currentVal = "";
+      } else if (c === '\r') {
+        // ignore carriage return
+      } else if (c === '\n') {
+        currentRow.push(currentVal.trim());
+        rows.push(currentRow);
+        currentRow = [];
+        currentVal = "";
+      } else {
+        currentVal += c;
+      }
+    }
+  }
+  if (currentVal || currentRow.length > 0) {
+    currentRow.push(currentVal.trim());
+    rows.push(currentRow);
+  }
+  return rows;
+}
+
+/**
+ * Intelligent Column Mapping for Sheet / Excel rows
+ */
+function mapRowsToPatients(rows) {
+  if (!rows || rows.length < 2) return [];
+  const headerRow = rows[0].map(h => String(h || "").toLowerCase().trim());
+
+  const findIdx = (keywords, fallback) => {
+    const idx = headerRow.findIndex(h => keywords.some(k => h.includes(k)));
+    return idx !== -1 ? idx : fallback;
+  };
+
+  const colIndex = {
+    timestamp: findIdx(["timestamp", "time"], 0),
+    date: findIdx(["date"], 1),
+    name: findIdx(["patient name", "patient", "name"], 2),
+    ageSex: findIdx(["age/sex", "age / sex", "age", "sex", "gender"], 3),
+    phone: findIdx(["phone", "mobile", "contact", "tel"], 4),
+    address: findIdx(["address/city", "address", "city", "location"], 5),
+    allergies: findIdx(["allerg"], 6),
+    complaints: findIdx(["complaint", "symptom"], 7),
+    diagnosis: findIdx(["diagnos"], 8),
+    medications: findIdx(["medic", "rx"], 9),
+    advice: findIdx(["advic", "instruct"], 10),
+    investigations: findIdx(["investig", "test"], 11),
+    followUp: findIdx(["follow"], 12),
+    doctor: findIdx(["doctor"], 13)
+  };
+
+  const list = [];
+  for (let r = 1; r < rows.length; r++) {
+    const row = rows[r];
+    if (!row || row.length === 0) continue;
+
+    const rawPhone = String(row[colIndex.phone] || "").trim();
+    const digitsPhone = rawPhone.replace(/\D/g, "").slice(-10);
+    const name = String(row[colIndex.name] || "").trim();
+
+    if (!digitsPhone && !name) continue;
+
+    list.push({
+      phone: digitsPhone,
+      rawPhone: rawPhone,
+      name: name,
+      date: String(row[colIndex.date] || "").trim(),
+      timestamp: String(row[colIndex.timestamp] || "").trim(),
+      ageSex: String(row[colIndex.ageSex] || "").trim(),
+      address: String(row[colIndex.address] || "").trim(),
+      drugAllergies: String(row[colIndex.allergies] || "None").trim(),
+      chiefComplaints: String(row[colIndex.complaints] || "").trim(),
+      diagnosis: String(row[colIndex.diagnosis] || "").trim(),
+      medicationsSummary: String(row[colIndex.medications] || "").trim(),
+      advice: String(row[colIndex.advice] || "").trim(),
+      investigations: String(row[colIndex.investigations] || "").trim(),
+      followUp: String(row[colIndex.followUp] || "").trim(),
+      doctorName: String(row[colIndex.doctor] || "").trim()
+    });
+  }
+  return list;
+}
+
+/**
+ * Search patient records by phone number
+ */
+function searchPatientByPhone(inputPhone) {
+  const digits = String(inputPhone || "").replace(/\D/g, "").slice(-10);
+  if (!digits || digits.length < 10) return null;
+
+  const matches = cachedPatients.filter(p => p.phone === digits);
+  if (matches.length === 0) return null;
+
+  // Prioritize named entries over "Unnamed Patient"
+  const validNamedMatches = matches.filter(p => p.name && p.name.toLowerCase() !== "unnamed patient");
+  const candidates = validNamedMatches.length > 0 ? validNamedMatches : matches;
+
+  // Most recent visit is the last row in the sheet
+  const latestMatch = candidates[candidates.length - 1];
+  return {
+    patient: latestMatch,
+    allVisits: candidates
+  };
+}
+
+/**
+ * Auto-fill patient details into inputs & document preview
+ */
+function autoFillPatientDetails(match, showNotification = true) {
+  if (!match || !match.patient) return;
+  const p = match.patient;
+
+  if (p.name && p.name.toLowerCase() !== "unnamed patient") {
+    const inputName = document.getElementById("inputPatientName");
+    if (inputName) inputName.value = p.name;
+    appState.patient.name = p.name;
+  }
+
+  if (p.ageSex) {
+    const inputAge = document.getElementById("inputAgeSex");
+    if (inputAge) inputAge.value = p.ageSex;
+    appState.patient.ageSex = p.ageSex;
+  }
+
+  if (p.address) {
+    const inputAddr = document.getElementById("inputPatientAddress");
+    if (inputAddr) inputAddr.value = p.address;
+    appState.patient.address = p.address;
+  }
+
+  if (p.drugAllergies) {
+    const inputAllergies = document.getElementById("inputDrugAllergies");
+    if (inputAllergies) inputAllergies.value = p.drugAllergies;
+    appState.patient.drugAllergies = p.drugAllergies;
+  }
+
+  // Update live preview document report immediately
+  renderAllPages();
+
+  // Status badge update
+  const badge = document.getElementById("phoneLookupBadge");
+  if (badge) {
+    badge.className = "phone-status-badge found";
+    badge.textContent = `✓ Patient Found: ${p.name || 'Record matched'}`;
+    badge.classList.remove("hidden");
+  }
+
+  // Display patient found card
+  renderPatientFoundCard(match);
+
+  if (showNotification) {
+    showToast(`✓ Patient details fetched from Sheet: ${p.name || 'Patient'} (${p.ageSex || 'Matched'} - ${p.address || ''})`);
+  }
+}
+
+/**
+ * Render dynamic Patient Found Card with details & action buttons
+ */
+function renderPatientFoundCard(match) {
+  const card = document.getElementById("patientFoundCard");
+  if (!card) return;
+  const p = match.patient;
+  const visitCount = match.allVisits ? match.allVisits.length : 1;
+  const visitDate = p.date || p.timestamp || "Recent Visit";
+  const hasClinicalNotes = Boolean(p.chiefComplaints || p.diagnosis || p.medicationsSummary || p.advice);
+
+  card.innerHTML = `
+    <div class="patient-match-header">
+      <div class="patient-match-title">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2.2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+        <span>Existing Patient Record Found</span>
+        <span class="patient-match-badge">${visitCount > 1 ? `${visitCount} Visits in Sheet` : 'Sheet Record'}</span>
+      </div>
+      <button type="button" class="btn-clear-match" id="btnCloseMatchCard" title="Dismiss">&times;</button>
+    </div>
+    <div class="patient-match-details">
+      <div class="patient-detail-pill">
+        <span class="patient-detail-label">Patient Name</span>
+        <span class="patient-detail-val">${escapeHtml(p.name || '-')}</span>
+      </div>
+      <div class="patient-detail-pill">
+        <span class="patient-detail-label">Age / Sex</span>
+        <span class="patient-detail-val">${escapeHtml(p.ageSex || '-')}</span>
+      </div>
+      <div class="patient-detail-pill">
+        <span class="patient-detail-label">Address</span>
+        <span class="patient-detail-val">${escapeHtml(p.address || '-')}</span>
+      </div>
+      <div class="patient-detail-pill">
+        <span class="patient-detail-label">Drug Allergies</span>
+        <span class="patient-detail-val">${escapeHtml(p.drugAllergies || 'None')}</span>
+      </div>
+      ${p.diagnosis ? `
+      <div class="patient-detail-pill" style="grid-column: 1 / -1;">
+        <span class="patient-detail-label">Last Diagnosis (${escapeHtml(visitDate)})</span>
+        <span class="patient-detail-val" style="color:#0284c7;">${escapeHtml(p.diagnosis)}</span>
+      </div>` : ''}
+    </div>
+    <div class="patient-match-actions">
+      ${hasClinicalNotes ? `
+      <button type="button" id="btnLoadPreviousNotes" class="btn-load-notes" title="Also restore previous diagnosis, complaints & Rx">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+        <span>Load Previous Clinical Notes &amp; Rx</span>
+      </button>` : ''}
+      <span style="font-size:0.68rem;color:#059669;margin-left:auto;font-weight:600;">✓ Auto-filled in report</span>
+    </div>
+  `;
+
+  card.classList.remove("hidden");
+
+  const btnClose = document.getElementById("btnCloseMatchCard");
+  if (btnClose) {
+    btnClose.addEventListener("click", () => {
+      card.classList.add("hidden");
+    });
+  }
+
+  const btnNotes = document.getElementById("btnLoadPreviousNotes");
+  if (btnNotes) {
+    btnNotes.addEventListener("click", () => {
+      loadPreviousClinicalNotes(p);
+    });
+  }
+}
+
+/**
+ * Parse medications summary string back to array of medication objects
+ */
+function parseMedicationsSummary(summary) {
+  if (!summary || !summary.trim()) return [];
+  const parts = summary.split(/\s*\|\s*/);
+  const meds = [];
+  for (const part of parts) {
+    const match = part.match(/^\d+\.\s*(.*?)\s*\[(.*?),\s*(.*?),\s*(.*?)\]$/);
+    if (match) {
+      meds.push({
+        name: match[1].trim(),
+        frequency: match[2].trim(),
+        duration: match[3].trim(),
+        remarks: match[4].trim()
+      });
+    } else {
+      const clean = part.replace(/^\d+\.\s*/, "").trim();
+      if (clean) {
+        meds.push({ name: clean, frequency: "", duration: "", remarks: "" });
+      }
+    }
+  }
+  return meds;
+}
+
+/**
+ * Load previous clinical notes & prescription
+ */
+function loadPreviousClinicalNotes(p) {
+  if (p.chiefComplaints) {
+    const el = document.getElementById("inputChiefComplaints");
+    if (el) el.value = p.chiefComplaints;
+    appState.clinical.chiefComplaints = p.chiefComplaints;
+  }
+  if (p.diagnosis) {
+    const el = document.getElementById("inputDiagnosis");
+    if (el) el.value = p.diagnosis;
+    appState.clinical.diagnosis = p.diagnosis;
+  }
+  if (p.advice) {
+    const el = document.getElementById("inputGeneralAdvice");
+    if (el) el.value = p.advice;
+    appState.advice = p.advice;
+  }
+  if (p.investigations) {
+    const el = document.getElementById("inputInvestigations");
+    if (el) el.value = p.investigations;
+    appState.investigations = p.investigations;
+  }
+  if (p.followUp) {
+    const el = document.getElementById("inputFollowUp");
+    if (el) el.value = p.followUp;
+    appState.followUp = p.followUp;
+  }
+
+  const parsedMeds = parseMedicationsSummary(p.medicationsSummary);
+  if (parsedMeds.length > 0) {
+    appState.medications = parsedMeds;
+    renderMedicationEditorCards();
+  }
+
+  renderAllPages();
+  showToast(`✓ Previous diagnosis & clinical notes loaded for ${p.name || 'Patient'}!`);
+}
+
+/**
+ * Fetch and synchronize records from Master Sheet CSV endpoint
+ */
+async function fetchSheetDatabase(forceRefresh = false) {
+  const statusDot = document.getElementById("sheetDbDot");
+  const statusText = document.getElementById("sheetDbStatusText");
+
+  if (!forceRefresh) {
+    const saved = localStorage.getItem("rx_sheet_patient_records");
+    if (saved) {
+      try {
+        cachedPatients = JSON.parse(saved);
+        if (statusText && cachedPatients.length > 0) {
+          statusText.textContent = `Master Sheet: ${cachedPatients.length} patient records ready`;
+          if (statusDot) statusDot.className = "sheet-db-dot";
+        }
+      } catch (e) {}
+    }
+  }
+
+  if (isFetchingSheetDb) return;
+  isFetchingSheetDb = true;
+
+  if (statusDot) statusDot.className = "sheet-db-dot loading";
+  if (statusText) statusText.textContent = "Syncing latest records from Sheet...";
+
+  const sheetId = getMasterSheetId();
+  const csvUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&t=${Date.now()}`;
+
+  try {
+    const res = await fetch(csvUrl);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const csvText = await res.text();
+    const rows = parseCSV(csvText);
+    const patients = mapRowsToPatients(rows);
+
+    if (patients.length > 0) {
+      cachedPatients = patients;
+      localStorage.setItem("rx_sheet_patient_records", JSON.stringify(patients));
+      if (statusDot) statusDot.className = "sheet-db-dot";
+      if (statusText) statusText.textContent = `Master Sheet Connected: ${patients.length} patient records`;
+      if (forceRefresh) showToast(`✓ Sheet synchronized! ${patients.length} records active.`);
+    } else {
+      if (statusDot) statusDot.className = "sheet-db-dot";
+      if (statusText) statusText.textContent = "Sheet connected (0 records found)";
+    }
+  } catch (err) {
+    console.warn("Could not fetch Google Sheet CSV directly:", err);
+    if (cachedPatients.length > 0) {
+      if (statusDot) statusDot.className = "sheet-db-dot";
+      if (statusText) statusText.textContent = `Offline Mode: ${cachedPatients.length} cached records ready`;
+    } else {
+      if (statusDot) statusDot.className = "sheet-db-dot error";
+      if (statusText) statusText.textContent = "Could not sync sheet (Check internet or permissions)";
+    }
+  } finally {
+    isFetchingSheetDb = false;
+  }
+}
+
+/**
+ * Handle offline Excel / CSV file upload
+ */
+function handleExcelFileInput(e) {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function(evt) {
+    try {
+      if (typeof XLSX === "undefined") {
+        showToast("Excel reader library loading, please try again in a moment.");
+        return;
+      }
+      const data = new Uint8Array(evt.target.result);
+      const workbook = XLSX.read(data, { type: "array" });
+      const firstSheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[firstSheetName];
+      const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+      const patients = mapRowsToPatients(rows);
+
+      if (patients.length > 0) {
+        cachedPatients = [...cachedPatients, ...patients];
+        localStorage.setItem("rx_sheet_patient_records", JSON.stringify(cachedPatients));
+        const statusText = document.getElementById("sheetDbStatusText");
+        if (statusText) {
+          statusText.textContent = `Imported: ${patients.length} records from ${file.name}`;
+        }
+        showToast(`✓ Imported ${patients.length} patient records from ${file.name}!`);
+      } else {
+        showToast("No valid patient records found in file.");
+      }
+    } catch (err) {
+      console.error("Error reading Excel file:", err);
+      showToast("Could not parse file. Ensure valid .xlsx or .csv format.");
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+/**
+ * Initialize Master Sheet Database Controls
+ */
+function initSheetDatabase() {
+  const btnRefresh = document.getElementById("btnRefreshSheetData");
+  if (btnRefresh) {
+    btnRefresh.addEventListener("click", () => fetchSheetDatabase(true));
+  }
+
+  const excelInput = document.getElementById("excelFileInput");
+  if (excelInput) {
+    excelInput.addEventListener("change", handleExcelFileInput);
+  }
+
+  const btnFetch = document.getElementById("btnFetchByPhone");
+  if (btnFetch) {
+    btnFetch.addEventListener("click", () => {
+      const phoneInput = document.getElementById("inputPatientPhone");
+      const val = phoneInput ? phoneInput.value : "";
+      const digits = val.replace(/\D/g, "").slice(0, 10);
+      if (!digits) {
+        showToast("Please enter a 10-digit phone number to search.");
+        if (phoneInput) phoneInput.focus();
+        return;
+      }
+      const match = searchPatientByPhone(digits);
+      if (match) {
+        autoFillPatientDetails(match, true);
+      } else {
+        showToast(`No record found in Sheet for phone: ${digits}`);
+        const badge = document.getElementById("phoneLookupBadge");
+        if (badge) {
+          badge.className = "phone-status-badge not-found";
+          badge.textContent = "New Patient (Not in sheet)";
+          badge.classList.remove("hidden");
+        }
+      }
+    });
+  }
+
+  // Pre-load sheet database
+  fetchSheetDatabase(false);
+}
 
 // SVGs
 const CADUCEUS_SVG = `
@@ -144,6 +617,7 @@ document.addEventListener("DOMContentLoaded", () => {
   renderAllPages();
   setupEventListeners();
   autoFitZoom();
+  initSheetDatabase();
 
   window.addEventListener("resize", () => {
     autoFitZoom();
@@ -589,18 +1063,49 @@ function showToast(message, allowOpenModal = false) {
 }
 
 /**
- * Local record log in browser
+ * Local record log in browser and instant cache update
  */
 function saveRecordToLocalLog() {
   try {
-    const records = JSON.parse(localStorage.getItem("rx_saved_records") || "[]");
-    records.push({
+    const p = appState.patient;
+    const c = appState.clinical;
+    const digits = (p.phone || "").replace(/\D/g, "").slice(-10);
+
+    const medsSummary = appState.medications
+      .filter(m => m.name.trim().length > 0)
+      .map((m, i) => `${i + 1}. ${m.name} [${m.frequency}, ${m.duration}, ${m.remarks}]`)
+      .join(" | ");
+
+    const record = {
       timestamp: new Date().toISOString(),
-      patientName: appState.patient.name,
-      date: appState.patient.date,
-      medicationsCount: appState.medications.length
-    });
+      date: p.date || new Date().toLocaleDateString('en-GB'),
+      name: p.name || "",
+      ageSex: p.ageSex || "",
+      phone: digits,
+      address: p.address || "",
+      drugAllergies: p.drugAllergies || "None",
+      chiefComplaints: c.chiefComplaints || "",
+      diagnosis: c.diagnosis || "",
+      medicationsSummary: medsSummary,
+      advice: appState.advice || "",
+      investigations: appState.investigations || "",
+      followUp: appState.followUp || "",
+      doctorName: appState.doctor.name || ""
+    };
+
+    const records = JSON.parse(localStorage.getItem("rx_saved_records") || "[]");
+    records.push(record);
     localStorage.setItem("rx_saved_records", JSON.stringify(records));
+
+    // Update in-memory patient cache
+    if (digits && p.name && p.name.toLowerCase() !== "unnamed patient") {
+      cachedPatients.push(record);
+      localStorage.setItem("rx_sheet_patient_records", JSON.stringify(cachedPatients));
+      const statusText = document.getElementById("sheetDbStatusText");
+      if (statusText) {
+        statusText.textContent = `Master Sheet Connected: ${cachedPatients.length} patient records`;
+      }
+    }
   } catch (e) {
     console.error("Local log error:", e);
   }
@@ -750,12 +1255,63 @@ function setupEventListeners() {
           }
         });
       }
+
+      if (item.id === "inputPatientPhone") {
+        el.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            const digitsOnly = el.value.replace(/\D/g, "").slice(0, 10);
+            if (digitsOnly.length === 10) {
+              const match = searchPatientByPhone(digitsOnly);
+              if (match) {
+                autoFillPatientDetails(match, true);
+              } else {
+                showToast(`No record found in Sheet for phone: ${digitsOnly}`);
+              }
+            }
+          }
+        });
+      }
+
       el.addEventListener("input", (e) => {
+        let val = e.target.value;
         if (item.id === "inputPatientPhone" || item.id === "inputPhone") {
           // Strictly keep only digits and slice to max 10 digits
-          const digitsOnly = e.target.value.replace(/\D/g, "").slice(0, 10);
-          if (e.target.value !== digitsOnly) {
+          const digitsOnly = val.replace(/\D/g, "").slice(0, 10);
+          if (val !== digitsOnly) {
             e.target.value = digitsOnly;
+            val = digitsOnly;
+          }
+
+          // Real-time Sheet Auto-Fetch as soon as 10 digits are typed
+          if (item.id === "inputPatientPhone") {
+            const badge = document.getElementById("phoneLookupBadge");
+            const card = document.getElementById("patientFoundCard");
+
+            if (digitsOnly.length === 10) {
+              if (badge) {
+                badge.className = "phone-status-badge searching";
+                badge.textContent = "Searching sheet...";
+                badge.classList.remove("hidden");
+              }
+
+              const match = searchPatientByPhone(digitsOnly);
+              if (match) {
+                autoFillPatientDetails(match, true);
+              } else {
+                if (badge) {
+                  badge.className = "phone-status-badge not-found";
+                  badge.textContent = "New Patient (Not in sheet)";
+                  badge.classList.remove("hidden");
+                }
+                if (card) {
+                  card.classList.add("hidden");
+                }
+              }
+            } else {
+              if (badge) badge.classList.add("hidden");
+              if (card) card.classList.add("hidden");
+            }
           }
         }
         setDeepValue(appState, item.path, e.target.value);
